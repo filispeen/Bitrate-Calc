@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bitrate Calculator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div class="label-tag">// video tool</div>
+    <h1>Bitrate<br><span>Calculator</span></h1>
+    <p class="subtitle">Calculate the optimal bitrate for your video encoding</p>
+  </header>
+
+  <!-- Resolution + FPS -->
+  <div class="grid">
+    <div class="field">
+      <div class="field-label"><span class="dot"></span>Resolution</div>
+      <select id="resolution" onchange="onResChange()">
+        <option value="426x240">240p — 426×240</option>
+        <option value="640x360">360p — 640×360</option>
+        <option value="854x480">480p — 854×480</option>
+        <option value="1280x720" selected>720p — 1280×720</option>
+        <option value="1920x1080">1080p — 1920×1080</option>
+        <option value="2560x1440">1440p — 2560×1440</option>
+        <option value="3840x2160">4K — 3840×2160</option>
+        <option value="7680x4320">8K — 7680×4320</option>
+        <option value="custom">Custom...</option>
+      </select>
+    </div>
+    <div class="field">
+      <div class="field-label"><span class="dot"></span>Frame Rate</div>
+      <select id="fps" onchange="onFpsChange()">
+        <option value="24">24 fps — Cinema</option>
+        <option value="25">25 fps — PAL</option>
+        <option value="30" selected>30 fps — Standard</option>
+        <option value="48">48 fps — HFR</option>
+        <option value="60">60 fps — Smooth</option>
+        <option value="90">90 fps — VR / Gaming</option>
+        <option value="120">120 fps — High Speed</option>
+        <option value="240">240 fps — Slow-motion</option>
+        <option value="custom">Custom...</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Custom FPS (shown when "Custom..." is selected) -->
+  <div class="grid" id="customFpsWrap" style="display:none;">
+    <div class="field">
+      <div class="field-label"><span class="dot" style="background:var(--accent2)"></span>Custom FPS</div>
+      <input type="number" id="customFps" value="60" min="1" max="960" oninput="calculate()">
+    </div>
+  </div>
+  <!-- Custom resolution (shown when "Custom..." is selected) -->
+  <div class="grid" id="customResWrap" style="display:none;">
+    <div class="field">
+      <div class="field-label"><span class="dot" style="background:var(--accent2)"></span>Width (px)</div>
+      <input type="number" id="customW" value="1920" min="1" oninput="calculate()">
+    </div>
+    <div class="field">
+      <div class="field-label"><span class="dot" style="background:var(--accent2)"></span>Height (px)</div>
+      <input type="number" id="customH" value="1080" min="1" oninput="calculate()">
+    </div>
+  </div>
+
+  <!-- Codec -->
+  <div class="codec-group">
+    <div class="section-title">// codec</div>
+    <div class="codec-buttons">
+      <button class="codec-btn" data-codec="H.264" data-ffcodec="libx264" data-factor="1.0" onclick="selectCodec(this)">
+        H.264 / AVC<span class="efficiency">Baseline · Standard</span>
+      </button>
+      <button class="codec-btn active" data-codec="H.265" data-ffcodec="libx265" data-factor="0.55" onclick="selectCodec(this)">
+        H.265 / HEVC<span class="efficiency">+45% efficiency</span>
+      </button>
+      <button class="codec-btn" data-codec="H.266 / VVC" data-ffcodec="libvvenc" data-factor="0.28" onclick="selectCodec(this)">
+        H.266 / VVC<span class="efficiency">+72% efficiency</span>
+      </button>
+      <button class="codec-btn" data-codec="VP8" data-ffcodec="libvpx" data-factor="1.05" onclick="selectCodec(this)">
+        VP8<span class="efficiency">Google · WebM</span>
+      </button>
+      <button class="codec-btn" data-codec="VP9" data-ffcodec="libvpx-vp9" data-factor="0.6" onclick="selectCodec(this)">
+        VP9<span class="efficiency">+40% efficiency</span>
+      </button>
+      <button class="codec-btn" data-codec="AV1" data-ffcodec="libaom-av1" data-factor="0.4" onclick="selectCodec(this)">
+        AV1<span class="efficiency">+60% efficiency</span>
+      </button>
+      <button class="codec-btn" data-codec="MPEG-2" data-ffcodec="mpeg2video" data-factor="1.8" onclick="selectCodec(this)">
+        MPEG-2<span class="efficiency">Broadcast · DVD</span>
+      </button>
+      <button class="codec-btn" data-codec="MPEG-4" data-ffcodec="mpeg4" data-factor="1.1" onclick="selectCodec(this)">
+        MPEG-4 / DivX<span class="efficiency">Legacy standard</span>
+      </button>
+      <button class="codec-btn" data-codec="Theora" data-ffcodec="libtheora" data-factor="1.15" onclick="selectCodec(this)">
+        Theora<span class="efficiency">Open · OGG</span>
+      </button>
+      <button class="codec-btn" data-codec="ProRes 422 LT" data-ffcodec="prores_ks" data-ffprofile="lt" data-factor="2.8" onclick="selectCodec(this)">
+        ProRes 422 LT<span class="efficiency">Apple · Lightweight</span>
+      </button>
+      <button class="codec-btn" data-codec="ProRes 422" data-ffcodec="prores_ks" data-ffprofile="standard" data-factor="4.0" onclick="selectCodec(this)">
+        ProRes 422<span class="efficiency">Apple · Post</span>
+      </button>
+      <button class="codec-btn" data-codec="ProRes 422 HQ" data-ffcodec="prores_ks" data-ffprofile="hq" data-factor="5.2" onclick="selectCodec(this)">
+        ProRes 422 HQ<span class="efficiency">Apple · High Quality</span>
+      </button>
+      <button class="codec-btn" data-codec="ProRes 4444" data-ffcodec="prores_ks" data-ffprofile="4444" data-factor="6.5" onclick="selectCodec(this)">
+        ProRes 4444<span class="efficiency">Apple · VFX</span>
+      </button>
+      <button class="codec-btn" data-codec="ProRes RAW" data-ffcodec="prores_ks" data-ffprofile="4444xq" data-factor="9.0" onclick="selectCodec(this)">
+        ProRes RAW<span class="efficiency">Apple · RAW</span>
+      </button>
+      <button class="codec-btn" data-codec="DNxHD" data-ffcodec="dnxhd" data-factor="4.0" onclick="selectCodec(this)">
+        Avid DNxHD<span class="efficiency">1080p · Post</span>
+      </button>
+      <button class="codec-btn" data-codec="DNxHR" data-ffcodec="dnxhd" data-factor="5.5" onclick="selectCodec(this)">
+        Avid DNxHR<span class="efficiency">4K · Post</span>
+      </button>
+      <button class="codec-btn" data-codec="REDCODE RAW" data-ffcodec="r10k" data-factor="1.8" onclick="selectCodec(this)">
+        REDCODE RAW<span class="efficiency">RED Camera</span>
+      </button>
+      <button class="codec-btn" data-codec="BRAW" data-ffcodec="braw" data-factor="2.0" onclick="selectCodec(this)">
+        BRAW<span class="efficiency">Blackmagic RAW</span>
+      </button>
+      <button class="codec-btn" data-codec="CinemaDNG" data-ffcodec="rawvideo" data-factor="12.0" onclick="selectCodec(this)">
+        CinemaDNG<span class="efficiency">RAW · DCI</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Quality -->
+  <div class="quality-wrap">
+    <div class="quality-header">
+      <div class="quality-label"><span class="dot"></span>Quality</div>
+      <div class="quality-value" id="qualityLabel">High</div>
+    </div>
+    <div class="quality-presets">
+
+      <button class="preset-btn" data-q="15" onclick="setQuality(15, this)">
+        Very Low
+        <span class="tooltip">
+          <span class="tooltip-name">Very Low · 15%</span>
+          Mobile streaming, preview files, messaging apps. Compression artifacts are clearly visible.
+        </span>
+      </button>
+
+      <button class="preset-btn" data-q="30" onclick="setQuality(30, this)">
+        Web / Stream
+        <span class="tooltip">
+          <span class="tooltip-name">Low · 30%</span>
+          Twitch, YouTube Live, Zoom. Acceptable quality at minimal bitrate for live broadcasts.
+        </span>
+      </button>
+
+      <button class="preset-btn" data-q="50" onclick="setQuality(50, this)">
+        Social Media
+        <span class="tooltip">
+          <span class="tooltip-name">Medium · 50%</span>
+          Instagram Reels, TikTok, Facebook. Best balance between quality and file size.
+        </span>
+      </button>
+
+      <button class="preset-btn active" data-q="75" onclick="setQuality(75, this)">
+        High
+        <span class="tooltip">
+          <span class="tooltip-name">High · 75%</span>
+          YouTube, Vimeo, OTT platforms. Sharp detail, minimal artifacts. Recommended for publishing.
+        </span>
+      </button>
+
+      <button class="preset-btn" data-q="90" onclick="setQuality(90, this)">
+        Ultra
+        <span class="tooltip">
+          <span class="tooltip-name">Ultra · 90%</span>
+          Blu-ray, archival storage, DCP. Near-lossless with large file sizes.
+        </span>
+      </button>
+
+      <button class="preset-btn" data-q="100" onclick="setQuality(100, this)">
+        Lossless
+        <span class="tooltip">
+          <span class="tooltip-name">Lossless · 100%</span>
+          Master files for editing. Fully lossless, maximum bitrate. For archival and post-production only.
+        </span>
+      </button>
+
+    </div>
+    <input type="range" id="quality" min="1" max="100" value="75" oninput="onSliderChange()">
+  </div>
+
+  <!-- Result -->
+  <div class="result">
+    <div class="result-title"><span class="live-dot"></span>Result</div>
+    <div class="result-main">
+      <div class="result-number" id="bitrateVal" onclick="copyMain()">8.2</div>
+      <div class="result-unit" id="bitrateUnit">Mbit/s</div>
+      <span class="copy-hint">// click to copy as -b:v ffmpeg flag</span>
+    </div>
+
+    <div class="result-grid">
+      <div class="stat-card">
+        <div class="stat-label">Min Bitrate</div>
+        <div class="stat-value copyable" id="bitrateMin" onclick="copyStat('bitrateMin', 'min')">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Max Bitrate</div>
+        <div class="stat-value copyable" id="bitrateMax" onclick="copyStat('bitrateMax', 'max')">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Size / min</div>
+        <div class="stat-value highlight" id="sizePerMin">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Size / hour</div>
+        <div class="stat-value highlight" id="sizePerHour">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Pixels / sec</div>
+        <div class="stat-value" id="pixelsPerSec">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Codec</div>
+        <div class="stat-value" id="codecName">H.265</div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <span class="info-icon">ℹ</span>
+      <span id="infoText">Select parameters above to calculate.</span>
+    </div>
+  </div>
+
+  <!-- Hardware · Passes · OS -->
+  <div class="encode-options">
+    <div class="option-panel">
+      <div class="option-label"><span class="dot"></span>Hardware</div>
+      <div class="option-btns">
+        <button class="opt-btn active" data-hw="cpu"      onclick="selectHw(this)">CPU</button>
+        <button class="opt-btn"        data-hw="nvgpu"    onclick="selectHw(this)">NVIDIA GPU</button>
+        <button class="opt-btn"        data-hw="amdgpu"   onclick="selectHw(this)">AMD GPU</button>
+        <button class="opt-btn"        data-hw="intelgpu" onclick="selectHw(this)">Intel GPU</button>
+      </div>
+    </div>
+    <div class="option-panel">
+      <div class="option-label"><span class="dot"></span>Passes</div>
+      <div class="option-btns">
+        <button class="opt-btn active" data-pass="1" onclick="selectPass(this)">1-pass</button>
+        <button class="opt-btn"        data-pass="2" onclick="selectPass(this)">2-pass</button>
+      </div>
+    </div>
+    <div class="option-panel">
+      <div class="option-label"><span class="dot"></span>OS</div>
+      <div class="option-btns" id="osBtns">
+        <button class="opt-btn" data-os="windows" onclick="selectOs(this)">Windows</button>
+        <button class="opt-btn" data-os="linux"   onclick="selectOs(this)">Linux</button>
+        <button class="opt-btn" data-os="mac"     onclick="selectOs(this)">macOS</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FFmpeg command -->
+  <div class="ffmpeg-wrap">
+    <div class="ffmpeg-header">
+      <div class="ffmpeg-title">ffmpeg command</div>
+      <button class="ffmpeg-copy-btn" id="ffmpegCopyBtn" onclick="copyFfmpeg()">⎘ Copy command</button>
+    </div>
+    <div class="ffmpeg-code" id="ffmpegCode"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
