@@ -88,7 +88,7 @@
       <button class="codec-btn" data-codec="VP9" data-ffcodec="libvpx-vp9" data-factor="0.6" onclick="selectCodec(this)">
         VP9<span class="efficiency">+40% efficiency</span>
       </button>
-      <button class="codec-btn" data-codec="AV1" data-ffcodec="libaom-av1" data-factor="0.4" onclick="selectCodec(this)">
+      <button class="codec-btn" data-codec="AV1" data-ffcodec="libsvtav1" data-factor="0.4" onclick="selectCodec(this)">
         AV1<span class="efficiency">+60% efficiency</span>
       </button>
       <button class="codec-btn" data-codec="MPEG-2" data-ffcodec="mpeg2video" data-factor="1.8" onclick="selectCodec(this)">
@@ -245,6 +245,9 @@
         <button class="opt-btn"        data-hw="amdgpu"   onclick="selectHw(this)">AMD GPU</button>
         <button class="opt-btn"        data-hw="intelgpu" onclick="selectHw(this)">Intel GPU</button>
       </div>
+      <div id="hwWarn" style="display:none;margin-top:12px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,62,108,0.35);background:rgba(255,62,108,0.07);font-size:11px;color:#ff3e6c;letter-spacing:0.03em;line-height:1.55;align-items:flex-start;gap:8px;">
+        <span style="flex-shrink:1">⚠</span>
+      </div>
     </div>
     <div class="option-panel">
       <div class="option-label"><span class="dot"></span>Passes</div>
@@ -253,14 +256,7 @@
         <button class="opt-btn"        data-pass="2" onclick="selectPass(this)">2-pass</button>
       </div>
     </div>
-    <div class="option-panel">
-      <div class="option-label"><span class="dot"></span>OS</div>
-      <div class="option-btns" id="osBtns">
-        <button class="opt-btn" data-os="windows" onclick="selectOs(this)">Windows</button>
-        <button class="opt-btn" data-os="linux"   onclick="selectOs(this)">Linux</button>
-        <button class="opt-btn" data-os="mac"     onclick="selectOs(this)">macOS</button>
-      </div>
-    </div>
+
   </div>
 
   <!-- FFmpeg command -->

@@ -20,7 +20,7 @@ const HW_CODEC_MAP = {
   'libvvenc':   { nvgpu: null,          amdgpu: null,          intelgpu: null          },
   'libvpx':     { nvgpu: null,          amdgpu: null,          intelgpu: null          },
   'libvpx-vp9': { nvgpu: null,          amdgpu: null,          intelgpu: 'vp9_qsv'    },
-  'libaom-av1': { nvgpu: 'av1_nvenc',   amdgpu: 'av1_amf',    intelgpu: 'av1_qsv'    },
+  'libsvtav1': { nvgpu: 'av1_nvenc',   amdgpu: 'av1_amf',    intelgpu: 'av1_qsv'    },
   'mpeg2video': { nvgpu: null,          amdgpu: null,          intelgpu: 'mpeg2_qsv'  },
   'mpeg4':      { nvgpu: null,          amdgpu: null,          intelgpu: null          },
   'libtheora':  { nvgpu: null,          amdgpu: null,          intelgpu: null          },
@@ -77,8 +77,9 @@ function fmtSize(bytes) {
 function detectOs() {
   const ua = navigator.userAgent.toLowerCase();
   const pl = (navigator.platform || '').toLowerCase();
-  if (pl.includes('win') || ua.includes('windows')) return 'windows';
-  if (pl.includes('mac') || ua.includes('macintosh') || ua.includes('mac os')) return 'mac';
+  if (pl.includes('win') || ua.includes('windows')) { console.log('[os] detected: windows'); return 'windows'; }
+  if (pl.includes('mac') || ua.includes('macintosh') || ua.includes('mac os')) { console.log('[os] detected: mac'); return 'mac'; }
+  console.log('[os] detected: linux (fallback)');
   return 'linux';
 }
 
@@ -97,6 +98,8 @@ function nullDevice() {
 
 // Uses WebGL renderer string — the most reliable client-side GPU hint available.
 // Returns 'nvgpu' | 'amdgpu' | 'intelgpu' | 'cpu'
+let rawGpuRenderer = '';
+
 function detectGpu() {
   try {
     const canvas = document.createElement('canvas');
@@ -107,12 +110,38 @@ function detectGpu() {
     const renderer = ext
       ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toLowerCase()
       : gl.getParameter(gl.RENDERER).toLowerCase();
+    rawGpuRenderer = renderer;
+    console.log('[gpu] WebGL renderer:', renderer);
 
-    if (renderer.includes('nvidia') || renderer.includes('geforce') || renderer.includes('quadro') || renderer.includes('nvenc')) return 'nvgpu';
-    if (renderer.includes('amd') || renderer.includes('radeon') || renderer.includes('rx '))   return 'amdgpu';
-    if (renderer.includes('intel') || renderer.includes('iris') || renderer.includes('uhd') || renderer.includes('hd graphics')) return 'intelgpu';
-  } catch (_) { /* WebGL unavailable */ }
+    if (renderer.includes('nvidia') || renderer.includes('geforce') || renderer.includes('quadro') || renderer.includes('nvenc')) { console.log('[gpu] detected: nvgpu'); return 'nvgpu'; }
+    if (renderer.includes('amd') || renderer.includes('radeon') || renderer.includes('rx '))   { console.log('[gpu] detected: amdgpu'); return 'amdgpu'; }
+    if (renderer.includes('intel') || renderer.includes('iris') || renderer.includes('uhd') || renderer.includes('hd graphics')) { console.log('[gpu] detected: intelgpu'); return 'intelgpu'; }
+  } catch (e) { console.warn('[gpu] WebGL unavailable:', e.message); }
+  console.log('[gpu] detected: cpu (fallback)');
   return 'cpu';
+}
+
+// AV1 hardware encoding support by generation:
+// NVIDIA  — Ada (RTX 40xx) + Blackwell (RTX 50xx) only; RTX 30xx and below: decode only
+// AMD     — RDNA 3 (RX 7xxx) + RDNA 4 (RX 9xxx) only; RX 6xxx and below: decode only
+// Intel   — Arc discrete (Alchemist A-series, Battlemage B-series) only; iGPU (UHD/Iris): no encode
+function isAv1HwEncodeSupported(hw, renderer) {
+  if (hw === 'cpu') return true;
+  const r = renderer;
+  if (hw === 'nvgpu') {
+    // RTX 40xx: matches "rtx 40", "4060","4070","4080","4090" etc.
+    // RTX 50xx: matches "rtx 50", "5060","5070","5080","5090" etc.
+    return /rtx\s*4\d|rtx\s*5\d|4[06789]\d0|5[05678]\d0/.test(r);
+  }
+  if (hw === 'amdgpu') {
+    // RX 7xxx series (RDNA 3) or RX 9xxx (RDNA 4)
+    return /rx\s*7\d{3}|rx\s*9\d{3}|radeon\s*7\d{2}m|radeon\s*8\d{2}m|radeon\s*890m|radeon\s*780m/.test(r);
+  }
+  if (hw === 'intelgpu') {
+    // Arc A-series and B-series only
+    return /arc|a[3578]\d0|b[35]\d0/.test(r);
+  }
+  return false;
 }
 
 function setHwButton(hw) {
@@ -127,8 +156,16 @@ function resolveCodec(baseCodec, hw) {
   if (hw === 'cpu') return baseCodec;
   const map = HW_CODEC_MAP[baseCodec];
   if (!map) return baseCodec;
-  return map[hw] || baseCodec; // graceful fallback to CPU codec
+  return map[hw] || baseCodec;
 }
+
+function isHwSupported(baseCodec, hw) {
+  if (hw === 'cpu') return true;
+  const map = HW_CODEC_MAP[baseCodec];
+  return !!(map && map[hw]);
+}
+
+const HW_LABELS = { nvgpu: 'NVIDIA GPU', amdgpu: 'AMD GPU', intelgpu: 'Intel GPU' };
 
 // ── Event handlers ───────────────────────────────────────────────────────────
 
@@ -151,6 +188,7 @@ function selectCodec(btn) {
   currentCodecName   = btn.dataset.codec;
   currentFfCodec     = btn.dataset.ffcodec;
   currentFfProfile   = btn.dataset.ffprofile || null;
+  console.log(`[codec] ${currentCodecName} | ffcodec: ${currentFfCodec} | profile: ${currentFfProfile} | factor: ${currentCodecFactor}`);
   calculate();
 }
 
@@ -158,6 +196,7 @@ function selectHw(btn) {
   document.querySelectorAll('[data-hw]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentHw = btn.dataset.hw;
+  console.log(`[hw] selected: ${currentHw} | codec ${currentFfCodec} supported: ${isHwSupported(currentFfCodec, currentHw)}`);
   calculate();
 }
 
@@ -165,6 +204,7 @@ function selectPass(btn) {
   document.querySelectorAll('[data-pass]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentPasses = parseInt(btn.dataset.pass);
+  console.log(`[pass] ${currentPasses}-pass encoding`);
   calculate();
 }
 
@@ -214,6 +254,7 @@ function calculate() {
   const fpsFactor     = Math.pow(fps / 30, 0.75);
   const qualityFactor = 0.2 + (quality / 100) * 1.8;
   const bitrate       = baseBitrate * fpsFactor * qualityFactor * currentCodecFactor;
+  console.log('[calc]', { resolution: key, fps, quality, baseBitrate, fpsFactor: +fpsFactor.toFixed(3), qualityFactor: +qualityFactor.toFixed(3), codecFactor: currentCodecFactor, bitrate_mbps: +bitrate.toFixed(3) });
 
   rawBitrate = bitrate;
   rawMin     = bitrate * 0.5;
@@ -261,6 +302,7 @@ function calculate() {
     `VBR range: ${fmtBitrateShort(rawMin)} – ${fmtBitrateShort(rawMax)}.`;
 
   updateFfmpegBlock(width, height);
+  updateHwWarning();
 }
 
 // ── FFmpeg command builder ────────────────────────────────────────────────────
@@ -304,7 +346,7 @@ function buildCommandParts(width, height) {
     if (hw === 'cpu') extraPairs.push(['-quality', 'good'], ['-cpu-used', '2'], ['-row-mt', '1']);
     else              extraPairs.push(['-preset', 'medium']);
     outputExt = 'webm';
-  } else if (base === 'libaom-av1' || codec === 'av1_nvenc' || codec === 'av1_amf' || codec === 'av1_qsv') {
+  } else if (base === 'libsvtav1' || codec === 'av1_nvenc' || codec === 'av1_amf' || codec === 'av1_qsv') {
     if      (hw === 'cpu')      extraPairs.push(['-cpu-used', '4'], ['-row-mt', '1']);
     else if (hw === 'nvgpu')    extraPairs.push(['-preset', 'p4']);
     else if (hw === 'amdgpu')   extraPairs.push(['-quality', 'quality']);
@@ -328,12 +370,13 @@ function buildCommandParts(width, height) {
     outputExt = 'ogv';
   }
 
-  return { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes };
+  const noVbr = base === 'libsvtav1' && hw === 'cpu';
+  return { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr };
 }
 
 function updateFfmpegBlock(width, height) {
   const d = buildCommandParts(width, height);
-  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes } = d;
+  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr } = d;
 
   const T    = (cls, text) => `<span class="${cls}">${text}</span>`;
   const flag = t => T('tok-flag', t);
@@ -361,7 +404,7 @@ function updateFfmpegBlock(width, height) {
 
     lines.push(`  ${flag('-b:v')} ${val(bv)}`);
     lines.push(`  ${flag('-minrate')} ${val(minV)}`);
-    lines.push(`  ${flag('-maxrate')} ${val(maxV)}`);
+    if (!noVbr) lines.push(`  ${flag('-maxrate')} ${val(maxV)}`);
     lines.push(`  ${flag('-bufsize')} ${val(buf)}`);
 
     if (passes === 1 || passNum === 2) {
@@ -428,6 +471,7 @@ function showToast(msg) {
 // Click main bitrate → copy as -b:v flag
 function copyMain() {
   const text = `-b:v ${toFfmpegBitrate(rawBitrate)}`;
+  console.log('[copy] bitrate flag:', text);
   clipboardWrite(text);
   flashEl('bitrateVal');
   showToast(`Copied: ${text}`);
@@ -446,7 +490,7 @@ function copyStat(id, type) {
 // Build a clean single-line command (or two joined by &&) for clipboard
 function buildPlainCommand(width, height) {
   const d = buildCommandParts(width, height);
-  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes } = d;
+  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr } = d;
 
   const hwFlags = hw === 'nvgpu'    ? '-hwaccel cuda '
                 : hw === 'amdgpu'   ? '-hwaccel d3d11va '
@@ -454,7 +498,9 @@ function buildPlainCommand(width, height) {
                 : '';
   const extras  = extraPairs.map(([f, v]) => `${f} ${v}`).join(' ');
   const base    = `ffmpeg ${hwFlags}-i input.mp4 -vcodec ${codec} ${extras} -vf scale=${width}:${height} -r ${fpsVal} -pix_fmt ${pixFmt}`;
-  const tail    = `-b:v ${bv} -minrate ${minV} -maxrate ${maxV} -bufsize ${buf}`;
+  const tail    = noVbr
+    ? `-b:v ${bv} -minrate ${minV} -bufsize ${buf}`
+    : `-b:v ${bv} -minrate ${minV} -maxrate ${maxV} -bufsize ${buf}`;
 
   if (passes === 1) {
     return `${base} ${tail} -acodec aac -b:a 192k output.${outputExt}`.replace(/\s+/g, ' ').trim();
@@ -477,6 +523,7 @@ function copyFfmpeg() {
   }
 
   const plain = buildPlainCommand(width, height);
+  console.log('[copy] full command:', plain);
   clipboardWrite(plain);
 
   const btn = document.getElementById('ffmpegCopyBtn');
@@ -484,6 +531,40 @@ function copyFfmpeg() {
   btn.textContent = '✓ Copied!';
   setTimeout(() => { btn.classList.remove('flash'); btn.textContent = '⎘ Copy command'; }, 1800);
   showToast('One-liner copied!');
+}
+
+// ── HW codec support warning ────────────────────────────────────────────────
+
+function updateHwWarning() {
+  const el = document.getElementById('hwWarn');
+  if (!el) return;
+
+  // General codec+hw compatibility check
+  if (currentHw !== 'cpu' && !isHwSupported(currentFfCodec, currentHw)) {
+    const msg = currentCodecName + ' does not support hardware encoding on ' + HW_LABELS[currentHw] +' - command generated for CPU encoder (' + currentFfCodec + ').';
+    console.warn('[hw-warn] codec unsupported:', msg);
+    el.querySelector('span').textContent = msg;
+    el.style.display = 'flex';
+    return;
+  }
+
+  // AV1-specific generation check (RTX 40+/50+, RX 7000+/9000+, Arc only)
+  if (currentFfCodec === 'libsvtav1' && currentHw !== 'cpu' && rawGpuRenderer) {
+    if (!isAv1HwEncodeSupported(currentHw, rawGpuRenderer)) {
+      const genNote = {
+        nvgpu:    'only RTX 40xx (Ada) and RTX 50xx (Blackwell)',
+        amdgpu:   'only RX 7000 (RDNA 3) and RX 9000 (RDNA 4)',
+        intelgpu: 'only Arc A-series and B-series (discrete GPUs)',
+      }[currentHw] || '';
+      const msg = 'AV1 encode: Your ' + HW_LABELS[currentHw] + ' generation does not support AV1 hardware encoding (' + genNote + ').';
+      console.warn('[hw-warn] AV1 gen unsupported:', msg);
+      el.querySelector('span').textContent = msg;
+      el.style.display = 'flex';
+      return;
+    }
+  }
+
+  el.style.display = 'none';
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -494,4 +575,5 @@ setOsButton(currentOs);
 currentHw = detectGpu();
 setHwButton(currentHw);
 
+console.log('[init] Bitrate Calculator ready | os:', currentOs, '| hw:', currentHw);
 calculate();
