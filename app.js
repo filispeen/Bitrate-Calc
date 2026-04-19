@@ -128,19 +128,14 @@ function detectGpu() {
 function isAv1HwEncodeSupported(hw, renderer) {
   if (hw === 'cpu') return true;
   const r = renderer;
-  if (hw === 'nvgpu') {
-    // RTX 40xx: matches "rtx 40", "4060","4070","4080","4090" etc.
-    // RTX 50xx: matches "rtx 50", "5060","5070","5080","5090" etc.
-    return /rtx\s*4\d|rtx\s*5\d|4[06789]\d0|5[05678]\d0/.test(r);
-  }
-  if (hw === 'amdgpu') {
-    // RX 7xxx series (RDNA 3) or RX 9xxx (RDNA 4)
-    return /rx\s*7\d{3}|rx\s*9\d{3}|radeon\s*7\d{2}m|radeon\s*8\d{2}m|radeon\s*890m|radeon\s*780m/.test(r);
-  }
-  if (hw === 'intelgpu') {
-    // Arc A-series and B-series only
-    return /arc|a[3578]\d0|b[35]\d0/.test(r);
-  }
+
+  const model = r.match(/\b(\d{4})\b/);
+  const gen = model ? Math.floor(parseInt(model[1]) / 100) : null;
+  console.log(`[av1-check] hw=${hw} model=${model?.[1]} gen=${gen}`);
+
+  if (hw === 'nvgpu')    return gen !== null && gen >= 40;
+  if (hw === 'amdgpu')   return gen !== null && gen >= 70;
+  if (hw === 'intelgpu') return /arc/.test(r);
   return false;
 }
 
@@ -541,7 +536,8 @@ function updateHwWarning() {
 
   // General codec+hw compatibility check
   if (currentHw !== 'cpu' && !isHwSupported(currentFfCodec, currentHw)) {
-    const msg = currentCodecName + ' does not support hardware encoding on ' + HW_LABELS[currentHw] +' - command generated for CPU encoder (' + currentFfCodec + ').';
+    const msg = currentCodecName + ' не підтримує апаратне кодування на ' + HW_LABELS[currentHw] +
+      ' — команда згенерована для CPU-енкодера (' + currentFfCodec + ').';
     console.warn('[hw-warn] codec unsupported:', msg);
     el.querySelector('span').textContent = msg;
     el.style.display = 'flex';
@@ -552,11 +548,11 @@ function updateHwWarning() {
   if (currentFfCodec === 'libsvtav1' && currentHw !== 'cpu' && rawGpuRenderer) {
     if (!isAv1HwEncodeSupported(currentHw, rawGpuRenderer)) {
       const genNote = {
-        nvgpu:    'only RTX 40xx (Ada) and RTX 50xx (Blackwell)',
-        amdgpu:   'only RX 7000 (RDNA 3) and RX 9000 (RDNA 4)',
-        intelgpu: 'only Arc A-series and B-series (discrete GPUs)',
+        nvgpu:    'лише RTX 40xx (Ada) і RTX 50xx (Blackwell)',
+        amdgpu:   'лише RX 7000 (RDNA 3) і RX 9000 (RDNA 4)',
+        intelgpu: 'лише Arc A-series і B-series (дискретні)',
       }[currentHw] || '';
-      const msg = 'AV1 encode: Your ' + HW_LABELS[currentHw] + ' generation does not support AV1 hardware encoding (' + genNote + ').';
+      const msg = 'AV1 encode: ' + HW_LABELS[currentHw] + ' вашого покоління не підтримує апаратне кодування AV1 (' + genNote + ').';
       console.warn('[hw-warn] AV1 gen unsupported:', msg);
       el.querySelector('span').textContent = msg;
       el.style.display = 'flex';
