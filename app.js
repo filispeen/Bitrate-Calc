@@ -536,8 +536,8 @@ function updateHwWarning() {
 
   // General codec+hw compatibility check
   if (currentHw !== 'cpu' && !isHwSupported(currentFfCodec, currentHw)) {
-    const msg = currentCodecName + ' не підтримує апаратне кодування на ' + HW_LABELS[currentHw] +
-      ' — команда згенерована для CPU-енкодера (' + currentFfCodec + ').';
+    const msg = currentCodecName + ' does not support hardware encoding on ' + HW_LABELS[currentHw] +
+      ' - command generated for CPU encoder (' + currentFfCodec + ').';
     console.warn('[hw-warn] codec unsupported:', msg);
     el.querySelector('span').textContent = msg;
     el.style.display = 'flex';
@@ -548,11 +548,11 @@ function updateHwWarning() {
   if (currentFfCodec === 'libsvtav1' && currentHw !== 'cpu' && rawGpuRenderer) {
     if (!isAv1HwEncodeSupported(currentHw, rawGpuRenderer)) {
       const genNote = {
-        nvgpu:    'лише RTX 40xx (Ada) і RTX 50xx (Blackwell)',
-        amdgpu:   'лише RX 7000 (RDNA 3) і RX 9000 (RDNA 4)',
-        intelgpu: 'лише Arc A-series і B-series (дискретні)',
+        nvgpu:    'only RTX 40xx (Ada) and RTX 50xx (Blackwell)',
+        amdgpu:   'only RX 7000 (RDNA 3) and RX 9000 (RDNA 4)',
+        intelgpu: 'only Arc A-series and B-series (discrete GPUs)',
       }[currentHw] || '';
-      const msg = 'AV1 encode: ' + HW_LABELS[currentHw] + ' вашого покоління не підтримує апаратне кодування AV1 (' + genNote + ').';
+      const msg = 'AV1 encode: Your ' + HW_LABELS[currentHw] + ' generation does not support AV1 hardware encoding (' + genNote + ').';
       console.warn('[hw-warn] AV1 gen unsupported:', msg);
       el.querySelector('span').textContent = msg;
       el.style.display = 'flex';
