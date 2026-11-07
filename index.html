@@ -212,14 +212,6 @@
         <div class="stat-value copyable" id="bitrateMax" onclick="copyStat('bitrateMax', 'max')">—</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Size / min</div>
-        <div class="stat-value highlight" id="sizePerMin">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Size / hour</div>
-        <div class="stat-value highlight" id="sizePerHour">—</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-label">Pixels / sec</div>
         <div class="stat-value" id="pixelsPerSec">—</div>
       </div>
@@ -227,11 +219,129 @@
         <div class="stat-label">Codec</div>
         <div class="stat-value" id="codecName">H.265</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">Size / sec</div>
+        <div class="stat-value highlight copyable" id="sizePerSec" onclick="copySize('sizePerSec', 'Size / sec')">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Size / min</div>
+        <div class="stat-value highlight copyable" id="sizePerMin" onclick="copySize('sizePerMin', 'Size / min')">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Size / hour</div>
+        <div class="stat-value highlight copyable" id="sizePerHour" onclick="copySize('sizePerHour', 'Size / hour')">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Est. File Size</div>
+        <div class="stat-value highlight copyable" id="sizeEstQuick" onclick="scrollToSizeCalc()">—</div>
+      </div>
     </div>
 
     <div class="info-box">
       <span class="info-icon">ℹ</span>
       <span id="infoText">Select parameters above to calculate.</span>
+    </div>
+  </div>
+
+  <!-- File Size Calculator by Duration -->
+  <div class="size-calc-wrap" id="sizeCalcSection">
+    <div class="size-calc-header">
+      <div>
+        <div class="section-title" style="margin-bottom:6px;">// file size calculator</div>
+        <div class="size-calc-heading"><span class="dot" style="background:var(--accent3);"></span>Estimated File Size by Duration</div>
+      </div>
+      <div class="rate-badge">
+        1 sec ≈ <strong id="calcSecRate">—</strong>
+      </div>
+    </div>
+
+    <div class="duration-grid">
+      <div class="dur-inputs-group">
+        <div class="dur-field">
+          <span class="dur-label"><span class="dur-dot"></span>Hours</span>
+          <div class="dur-input-box">
+            <input type="number" id="durH" min="0" max="999" value="0" oninput="onDurationInput()">
+            <span class="dur-suffix">h</span>
+          </div>
+        </div>
+        <div class="dur-field">
+          <span class="dur-label"><span class="dur-dot"></span>Minutes</span>
+          <div class="dur-input-box">
+            <input type="number" id="durM" min="0" max="59" value="10" oninput="onDurationInput()">
+            <span class="dur-suffix">m</span>
+          </div>
+        </div>
+        <div class="dur-field">
+          <span class="dur-label"><span class="dur-dot"></span>Seconds</span>
+          <div class="dur-input-box">
+            <input type="number" id="durS" min="0" max="59" value="0" oninput="onDurationInput()">
+            <span class="dur-suffix">s</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="audio-input-field">
+        <span class="dur-label"><span class="dur-dot" style="background:var(--accent);"></span>Audio Track</span>
+        <div class="audio-select-box">
+          <select id="audioBitrate" onchange="onAudioChange()">
+            <option value="0">No Audio (Video Only)</option>
+            <option value="128">128 kbps — AAC Standard</option>
+            <option value="192" selected>192 kbps — AAC High (Default)</option>
+            <option value="256">256 kbps — AAC Studio</option>
+            <option value="320">320 kbps — AAC Max</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Presets -->
+    <div class="dur-presets-wrap">
+      <span class="presets-title">Quick Presets:</span>
+      <div class="dur-presets">
+        <button class="dur-preset-btn" data-dur="15" onclick="selectDurationPreset(0, 0, 15, this)">15s</button>
+        <button class="dur-preset-btn" data-dur="30" onclick="selectDurationPreset(0, 0, 30, this)">30s</button>
+        <button class="dur-preset-btn" data-dur="60" onclick="selectDurationPreset(0, 1, 0, this)">1m</button>
+        <button class="dur-preset-btn" data-dur="180" onclick="selectDurationPreset(0, 3, 0, this)">3m</button>
+        <button class="dur-preset-btn" data-dur="300" onclick="selectDurationPreset(0, 5, 0, this)">5m</button>
+        <button class="dur-preset-btn active" data-dur="600" onclick="selectDurationPreset(0, 10, 0, this)">10m</button>
+        <button class="dur-preset-btn" data-dur="1800" onclick="selectDurationPreset(0, 30, 0, this)">30m</button>
+        <button class="dur-preset-btn" data-dur="3600" onclick="selectDurationPreset(1, 0, 0, this)">1h</button>
+        <button class="dur-preset-btn" data-dur="7200" onclick="selectDurationPreset(2, 0, 0, this)">2h</button>
+      </div>
+    </div>
+
+    <!-- Result Banner -->
+    <div class="calc-result-card">
+      <div class="calc-result-top">
+        <div class="calc-result-tag">// Total Expected Size</div>
+        <div class="calc-result-headline" onclick="copyCalculatedSize()" title="Click to copy estimated size">
+          <span class="calc-number" id="calcFileSizeVal">—</span>
+          <span class="calc-unit" id="calcFileSizeUnit">MB</span>
+          <span class="calc-copy-hint">// click to copy size</span>
+        </div>
+        <div class="calc-formula-text" id="calcFormula">
+          Calculating based on 1-second data rate...
+        </div>
+      </div>
+
+      <div class="calc-metrics-grid">
+        <div class="metric-item">
+          <span class="metric-label">1 Sec Weight</span>
+          <span class="metric-value highlight" id="calcDetailSec">—</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Video Stream</span>
+          <span class="metric-value" id="calcDetailVideo">—</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Audio Stream</span>
+          <span class="metric-value" id="calcDetailAudio">—</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">VBR Expected Range</span>
+          <span class="metric-value vbr" id="calcDetailVbr">—</span>
+        </div>
+      </div>
     </div>
   </div>
 

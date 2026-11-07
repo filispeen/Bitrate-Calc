@@ -8,11 +8,12 @@ A zero-dependency, client-side video bitrate calculator with live ffmpeg command
 - **Resolutions** from 240p to 8K, plus custom width/height input
 - **Frame rates** — 24 / 25 / 30 / 48 / 60 / 90 / 120 / 240 fps
 - **Quality presets** with tooltips explaining each use case, plus a free slider (1–100)
-- **Result panel** — recommended bitrate, VBR min/max, file size per minute and per hour, pixels/sec
+- **Result panel** — recommended bitrate, VBR min/max, file size per second, per minute and per hour, pixels/sec, and estimated file size
+- **File Size Calculator** — estimate total video file size based on the 1-second data rate for any custom duration (Hours, Minutes, Seconds or presets from 15s to 2h), with audio track options (0 to 320 kbps) and VBR range estimation
 - **Hardware acceleration** — CPU, NVIDIA GPU (NVENC), AMD GPU (AMF), Intel GPU (QSV). Automatically selects the correct hardware encoder per codec
 - **1-pass / 2-pass** encoding — 2-pass shows both passes with correct null-device output
 - **OS-aware commands** — auto-detects Windows / Linux / macOS on load; null device switches between `NUL` and `/dev/null` accordingly
-- **Click-to-copy** — click the main bitrate for `-b:v`, click Min/Max for `-minrate` / `-maxrate` flags, or copy the full command as a clean one-liner
+- **Click-to-copy** — click the main bitrate for `-b:v`, click Min/Max for `-minrate` / `-maxrate` flags, click any size rate to copy, or copy the full command as a clean one-liner
 
 ## File structure
 

@@ -65,11 +65,27 @@ function toFfmpegBitrate(mbps) {
   return `${Math.round(mbps * 1000)}k`;
 }
 
+function fmtSizeDetailed(bytes) {
+  if (bytes <= 0) return { num: '0', unit: 'MB' };
+  if (bytes >= 1e12) return { num: (bytes / 1e12).toFixed(2), unit: 'TB' };
+  if (bytes >= 1e9) {
+    const val = bytes / 1e9;
+    return { num: val >= 10 ? val.toFixed(1) : val.toFixed(2), unit: 'GB' };
+  }
+  if (bytes >= 1e6) {
+    const val = bytes / 1e6;
+    return { num: val >= 100 ? val.toFixed(0) : (val >= 10 ? val.toFixed(1) : val.toFixed(2)), unit: 'MB' };
+  }
+  if (bytes >= 1e3) {
+    const val = bytes / 1e3;
+    return { num: val >= 10 ? val.toFixed(0) : val.toFixed(1), unit: 'KB' };
+  }
+  return { num: Math.round(bytes).toString(), unit: 'B' };
+}
+
 function fmtSize(bytes) {
-  if (bytes >= 1e12) return (bytes / 1e12).toFixed(2) + ' TB';
-  if (bytes >= 1e9)  return (bytes / 1e9).toFixed(1)  + ' GB';
-  if (bytes >= 1e6)  return (bytes / 1e6).toFixed(0)  + ' MB';
-  return (bytes / 1e3).toFixed(0) + ' KB';
+  const f = fmtSizeDetailed(bytes);
+  return `${f.num} ${f.unit}`;
 }
 
 // ── OS helpers ───────────────────────────────────────────────────────────────
@@ -256,7 +272,8 @@ function calculate() {
   rawMax     = bitrate * 1.5;
 
   const bitsPerSec   = bitrate * 1_000_000;
-  const bytesPerMin  = (bitsPerSec * 60) / 8;
+  const bytesPerSec  = bitsPerSec / 8;
+  const bytesPerMin  = bytesPerSec * 60;
   const bytesPerHour = bytesPerMin * 60;
   const pp = (width * height * fps) / 1_000_000;
 
@@ -266,6 +283,7 @@ function calculate() {
   document.getElementById('bitrateUnit').textContent = mf.unit;
   document.getElementById('bitrateMin').textContent  = fmtBitrateShort(rawMin);
   document.getElementById('bitrateMax').textContent  = fmtBitrateShort(rawMax);
+  document.getElementById('sizePerSec').textContent  = fmtSize(bytesPerSec);
   document.getElementById('sizePerMin').textContent  = fmtSize(bytesPerMin);
   document.getElementById('sizePerHour').textContent = fmtSize(bytesPerHour);
   document.getElementById('pixelsPerSec').textContent = pp >= 1000
@@ -296,6 +314,7 @@ function calculate() {
     `${resLabel} @ ${fps}fps · ${currentCodecName} · ${s[1]}. ` +
     `VBR range: ${fmtBitrateShort(rawMin)} – ${fmtBitrateShort(rawMax)}.`;
 
+  updateDurationCalculator();
   updateFfmpegBlock(width, height);
   updateHwWarning();
 }
@@ -365,13 +384,14 @@ function buildCommandParts(width, height) {
     outputExt = 'ogv';
   }
 
+  const audioKbps = getAudioKbps();
   const noVbr = base === 'libsvtav1' && hw === 'cpu';
-  return { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr };
+  return { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr, audioKbps };
 }
 
 function updateFfmpegBlock(width, height) {
   const d = buildCommandParts(width, height);
-  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr } = d;
+  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr, audioKbps } = d;
 
   const T    = (cls, text) => `<span class="${cls}">${text}</span>`;
   const flag = t => T('tok-flag', t);
@@ -403,7 +423,11 @@ function updateFfmpegBlock(width, height) {
     lines.push(`  ${flag('-bufsize')} ${val(buf)}`);
 
     if (passes === 1 || passNum === 2) {
-      lines.push(`  ${flag('-acodec')} ${val('aac')} ${flag('-b:a')} ${val('192k')}`);
+      if (audioKbps > 0) {
+        lines.push(`  ${flag('-acodec')} ${val('aac')} ${flag('-b:a')} ${val(audioKbps + 'k')}`);
+      } else {
+        lines.push(`  ${flag('-an')}`);
+      }
       lines.push(`  ${T('tok-file', `output.${outputExt}`)}`);
     } else {
       // Pass 1: discard output
@@ -485,7 +509,7 @@ function copyStat(id, type) {
 // Build a clean single-line command (or two joined by &&) for clipboard
 function buildPlainCommand(width, height) {
   const d = buildCommandParts(width, height);
-  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr } = d;
+  const { codec, pixFmt, outputExt, extraPairs, bv, minV, maxV, buf, fpsVal, hw, passes, noVbr, audioKbps } = d;
 
   const hwFlags = hw === 'nvgpu'    ? '-hwaccel cuda '
                 : hw === 'amdgpu'   ? '-hwaccel d3d11va '
@@ -496,14 +520,184 @@ function buildPlainCommand(width, height) {
   const tail    = noVbr
     ? `-b:v ${bv} -minrate ${minV} -bufsize ${buf}`
     : `-b:v ${bv} -minrate ${minV} -maxrate ${maxV} -bufsize ${buf}`;
+  const audioPart = audioKbps > 0 ? `-acodec aac -b:a ${audioKbps}k` : '-an';
 
   if (passes === 1) {
-    return `${base} ${tail} -acodec aac -b:a 192k output.${outputExt}`.replace(/\s+/g, ' ').trim();
+    return `${base} ${tail} ${audioPart} output.${outputExt}`.replace(/\s+/g, ' ').trim();
   }
 
   const p1 = `${base} -pass 1 -an ${tail} -f ${outputExt === 'webm' ? 'webm' : 'mp4'} ${nullDevice()}`.replace(/\s+/g, ' ').trim();
-  const p2 = `${base} -pass 2 ${tail} -acodec aac -b:a 192k output.${outputExt}`.replace(/\s+/g, ' ').trim();
+  const p2 = `${base} -pass 2 ${tail} ${audioPart} output.${outputExt}`.replace(/\s+/g, ' ').trim();
   return `${p1} && ${p2}`;
+}
+
+// ── Duration & File Size Calculator ──────────────────────────────────────────
+
+function getAudioKbps() {
+  const el = document.getElementById('audioBitrate');
+  return el ? (parseInt(el.value) || 0) : 192;
+}
+
+function getDurationSeconds() {
+  const h = Math.max(0, parseInt(document.getElementById('durH')?.value) || 0);
+  const m = Math.max(0, parseInt(document.getElementById('durM')?.value) || 0);
+  const s = Math.max(0, parseInt(document.getElementById('durS')?.value) || 0);
+  return (h * 3600) + (m * 60) + s;
+}
+
+function formatDurationText(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const parts = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0 || h > 0) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
+function updateDurationCalculator() {
+  const totalSec  = getDurationSeconds();
+  const audioKbps = getAudioKbps();
+
+  // Video data rate
+  const videoBitsPerSec  = rawBitrate * 1_000_000;
+  const videoBytesPerSec = videoBitsPerSec / 8;
+
+  // Audio data rate
+  const audioBitsPerSec  = audioKbps * 1_000;
+  const audioBytesPerSec = audioBitsPerSec / 8;
+
+  // Total 1-second data rate (weight of 1 second)
+  const totalBytesPerSec = videoBytesPerSec + audioBytesPerSec;
+
+  // Header badges: 1 sec ≈ X MB
+  const secFmt = fmtSize(totalBytesPerSec);
+  const calcSecRate = document.getElementById('calcSecRate');
+  if (calcSecRate) calcSecRate.textContent = `${secFmt}/s`;
+
+  const calcDetailSec = document.getElementById('calcDetailSec');
+  if (calcDetailSec) calcDetailSec.textContent = `${secFmt}/s`;
+
+  // Total Expected Size
+  const totalBytes = totalBytesPerSec * totalSec;
+  const videoBytes = videoBytesPerSec * totalSec;
+  const audioBytes = audioBytesPerSec * totalSec;
+
+  // VBR Range
+  const minBytes = ((rawMin * 1_000_000 / 8) + audioBytesPerSec) * totalSec;
+  const maxBytes = ((rawMax * 1_000_000 / 8) + audioBytesPerSec) * totalSec;
+
+  const tf = fmtSizeDetailed(totalBytes);
+  const sizeValEl  = document.getElementById('calcFileSizeVal');
+  const sizeUnitEl = document.getElementById('calcFileSizeUnit');
+  if (sizeValEl && sizeUnitEl) {
+    if (totalSec === 0) {
+      sizeValEl.textContent  = '0';
+      sizeUnitEl.textContent = 'MB';
+    } else {
+      sizeValEl.textContent  = tf.num;
+      sizeUnitEl.textContent = tf.unit;
+    }
+  }
+
+  // Quick stat card in Result grid
+  const quickEst = document.getElementById('sizeEstQuick');
+  if (quickEst) {
+    quickEst.textContent = totalSec === 0 ? '0 MB' : fmtSize(totalBytes);
+  }
+
+  // Video and audio stream sizes
+  const videoEl = document.getElementById('calcDetailVideo');
+  if (videoEl) videoEl.textContent = fmtSize(videoBytes);
+
+  const audioEl = document.getElementById('calcDetailAudio');
+  if (audioEl) audioEl.textContent = audioKbps > 0 ? fmtSize(audioBytes) : 'None';
+
+  // VBR expected range
+  const vbrEl = document.getElementById('calcDetailVbr');
+  if (vbrEl) {
+    vbrEl.textContent = totalSec > 0
+      ? `${fmtSize(minBytes)} – ${fmtSize(maxBytes)}`
+      : '—';
+  }
+
+  // Formula explanation
+  const formulaEl = document.getElementById('calcFormula');
+  if (formulaEl) {
+    if (totalSec > 0) {
+      const durStr = formatDurationText(totalSec);
+      const audioText = audioKbps > 0 ? ` (+${audioKbps}k audio)` : ' (no audio)';
+      formulaEl.textContent = `${totalSec}s (${durStr}) × ${secFmt}/s${audioText}`;
+    } else {
+      formulaEl.textContent = 'Enter duration above to calculate expected size.';
+    }
+  }
+
+  console.log('[calc-duration]', { totalSec, totalBytes: fmtSize(totalBytes), secWeight: secFmt, audioKbps });
+}
+
+function onDurationInput() {
+  const sec = getDurationSeconds();
+  document.querySelectorAll('.dur-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.dur) === sec);
+  });
+  updateDurationCalculator();
+}
+
+function selectDurationPreset(h, m, s, btn) {
+  const durHEl = document.getElementById('durH');
+  const durMEl = document.getElementById('durM');
+  const durSEl = document.getElementById('durS');
+  if (durHEl) durHEl.value = h;
+  if (durMEl) durMEl.value = m;
+  if (durSEl) durSEl.value = s;
+
+  document.querySelectorAll('.dur-preset-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  console.log(`[duration] preset selected: ${h}h ${m}m ${s}s`);
+  updateDurationCalculator();
+}
+
+function onAudioChange() {
+  const resSelect = document.getElementById('resolution').value;
+  let width, height;
+  if (resSelect === 'custom') {
+    width  = parseInt(document.getElementById('customW')?.value) || 1920;
+    height = parseInt(document.getElementById('customH')?.value) || 1080;
+  } else {
+    [width, height] = resSelect.split('x').map(Number);
+  }
+  updateDurationCalculator();
+  updateFfmpegBlock(width, height);
+}
+
+function scrollToSizeCalc() {
+  const el = document.getElementById('sizeCalcSection');
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    flashEl('calcFileSizeVal');
+  }
+}
+
+function copySize(id, label) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const text = el.textContent.trim();
+  clipboardWrite(text);
+  flashEl(id);
+  showToast(`Copied ${label || 'Size'}: ${text}`);
+}
+
+function copyCalculatedSize() {
+  const val = document.getElementById('calcFileSizeVal')?.textContent.trim();
+  const unit = document.getElementById('calcFileSizeUnit')?.textContent.trim();
+  if (!val || val === '—') return;
+  const text = `${val} ${unit}`;
+  clipboardWrite(text);
+  flashEl('calcFileSizeVal');
+  showToast(`Copied file size: ${text}`);
 }
 
 // Copy full ffmpeg command as one-liner
